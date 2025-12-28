@@ -2,10 +2,11 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 import numpy as np
 
-class PCAImputation:
+class PCA_imputation:
     def __init__(self, filepath):
         self.data_matrix = self.get_data_matrix(filepath)
-        self.nan_coords, self.valid_coords = self.init_data_matrix(self.data_matrix)
+        self.nan_coords, self.valid_coords = self.init_data_matrix()
+        self.std_matrix = StandardScaler().fit_transform(self.data_matrix)
         
     # načíta sa súbor do dataframe, hodnoty ako float, prvý stĺpec (číslo záznamu 1-300) sa dropol
     def get_data_matrix(self, filepath):
@@ -24,19 +25,16 @@ class PCAImputation:
 
         return nan_coords, valid_coords
 
-    @staticmethod
-    def compute_PCA(std_matrix):
-        cov_matrix = 1/(std_matrix.shape[0]-1) * ( std_matrix.T @ std_matrix)
-        eigenvalues, eigenvectors = np.linalg.eigh(cov_matrix) # miesto eig, eigh je pre symetrické matice
-        sorted_desc = np.argsort(eigenvalues)[::-1]  # zoradenie zostupne - aby prvý komponent mal najvyšší variance
-        eigenvectors = eigenvectors[:, sorted_desc]
+    def compute_PCA(self):
+        cov_matrix = 1/(self.std_matrix.shape[0]-1) * ( self.std_matrix.T @ self.std_matrix)
+        _, eigenvectors = np.linalg.eigh(cov_matrix) # miesto eig, eigh je pre symetrické matice
+        eigenvectors = eigenvectors[:, ::-1] # zoradenie zostupne - aby prvý komponent mal najvyšší variance
     
         return eigenvectors
 
-    @staticmethod
-    def get_imputated_matrix(std_data_matrix, eigenvectors, n_components):
+    def get_imputated_matrix(self, eigenvectors, n_components):
         loadings_matrix = eigenvectors[:, :n_components]
-        scores_matrix = std_data_matrix @ loadings_matrix
+        scores_matrix = self.std_matrix @ loadings_matrix
         reconstructed_matrix = scores_matrix @ loadings_matrix.T
 
         return reconstructed_matrix
@@ -50,19 +48,21 @@ class PCAImputation:
         return objective
     
     # hlavná funkcia, algoritmus na imputation s PCA
-    def imputate_data(self, n_components):
+    def imputate_data(self, n_components, max_iter=1000):
         current_objective = -1
         new_objective = -1
         
-        while (True):
-            std_matrix = StandardScaler().fit_transform(self.data_matrix)
-            eigenvectors = self.compute_PCA(std_matrix)
-            imputated_matrix = self.get_imputated_matrix(std_matrix, eigenvectors, n_components)
-            self.data_matrix[self.nan_coords] = imputated_matrix[self.nan_coords]
-            new_objective = self.get_objective(self.data_matrix, imputated_matrix, self.nan_coords)
+        for i in range(max_iter):
+            eigenvectors = self.compute_PCA()
+            imputated_matrix = self.get_imputated_matrix(eigenvectors, n_components)
+            self.std_matrix[self.nan_coords] = imputated_matrix[self.nan_coords]
+            new_objective = self.get_objective(self.std_matrix, imputated_matrix, self.nan_coords)
             
             # pokiaľ sa riešenie zlepšilo, nastaví sa nová hodnota a pokračuje sa
             if new_objective < current_objective or current_objective == -1:
                 current_objective = new_objective
             else:
                 break
+            
+        self.data_matrix[self.nan_coords] = imputated_matrix[self.nan_coords]
+        return current_objective
