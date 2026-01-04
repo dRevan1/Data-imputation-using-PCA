@@ -18,7 +18,9 @@ class PCA_imputation:
             self.complete_data_matrix, self.complete_std_matrix = None, None
             
         self.nan_coords, self.valid_coords = self.init_data_matrix()
-        self.missing_std_matrix, self.missing_mean_, self.missing_scale_ = StandardScaler().fit(self.data_matrix).transform(self.data_matrix), StandardScaler().fit(self.data_matrix).mean_, StandardScaler().fit(self.data_matrix).scale_
+        self.missing_std_matrix = StandardScaler().fit(self.data_matrix).transform(self.data_matrix)
+        self.missing_mean_ = StandardScaler().fit(self.data_matrix).mean_
+        self.missing_scale_ = StandardScaler().fit(self.data_matrix).scale_
      
             
     # načíta sa súbor do dataframe, hodnoty ako float, prvý stĺpec (číslo záznamu 1-300) sa dropol
@@ -50,13 +52,15 @@ class PCA_imputation:
 
 
     def get_imputated_matrix(self, eigenvectors, n_components):
-        loadings_matrix = eigenvectors[:, :n_components]
-        scores_matrix = self.missing_std_matrix @ loadings_matrix
-        reconstructed_matrix = scores_matrix @ loadings_matrix.T
+        loadings_matrix = eigenvectors[:, :n_components] # vyberie sa n_components vektorov - hlavných komponentov
+        scores_matrix = self.missing_std_matrix @ loadings_matrix # projekcia dát na hlavné komponenty
+        reconstructed_matrix = scores_matrix @ loadings_matrix.T # rekonštrukcia dát z hlavných komponentov
 
         return reconstructed_matrix
     
     
+    # účelová funkcia, cieľová hodnota, ktorá sa počíta s každou iteráciou algoritmu, aby sme zistili, či sa riešenie zlepšilo
+    # počítame ako rozdiel medzi dátami z pôvodnej matice a rekonštruovanej matice pre hodnoty, ktoré neboli NaN
     @staticmethod
     def get_objective(original_matrix, imputated_matrix, nan_coords):
         objective_matrix = original_matrix - imputated_matrix
